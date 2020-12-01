@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import datetime
 import pandas as pd
 
-DEBUG = False
+DEBUG = True
 SOURCE_URL = 'https://www.coronavirus2020.kz/'
 SOURCE_CSS_PATH = 'body > div.mainContainer > div.wrap_cov_cont ' \
     + '> div.first_cont_wrap:not(#manual_edit) > div.last_info_covid_bl > div.city_cov > div'
@@ -46,7 +46,7 @@ for item in results:
     region_en = None
     region_ru = None
     total_cases = None
-    new_cases = 0
+    new_cases = None
 
     for string in item.stripped_strings:
         if not region_en:
@@ -60,18 +60,12 @@ for item in results:
             region_en = REGIONS[region_ru]
             total_cases = region_total[1]
 
-        else:
-            new_cases = string.strip('()+')
-
     target_data[region_en] = {
         'region_en': region_en,
         'region_ru': region_ru,
         'total_cases': total_cases,
         'new_cases': new_cases,
     }
-
-if DEBUG:
-    print(target_data)
 
 for target_type in TARGET_PATHS:
     target_path = TARGET_PATHS[target_type]
@@ -86,17 +80,23 @@ for target_type in TARGET_PATHS:
 
         has_update = False
         date_today = 'current'
-        target_type = 'total_cases'
 
         for i, row in df.iterrows():
             region_en = row['region_en']
             item = target_data[region_en]
-            today_value = item[target_type]
+            today_value = item['total_cases']
             existing_value = row[date_today]
             df.loc[i, date_today] = today_value
+            new_value = int(today_value) - int(existing_value)
+            if new_value is None or new_value < 0:
+                raise Exception('Unexpected value in "{}": "{}"'.format(region_en, new_value))
+            target_data[region_en]['new_cases'] = new_value
 
             if int(existing_value) != int(today_value):
                 has_update = True
+
+        if DEBUG:
+            print(target_data)
 
         if has_update:
             print('Updates found!')
